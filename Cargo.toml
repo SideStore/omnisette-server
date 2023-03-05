@@ -1,0 +1,43 @@
+[package]
+name = "omnisette-server"
+description = "An HTTP server wrapper for omnisette. Supports both V1 (Provision) and V3 of anisette servers."
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+omnisette = { git = "https://github.com/SideStore/apple-private-apis.git", branch = "omnisette-async", features = [
+    "async",
+] }
+
+actix = "0.13"
+actix-web = "4"
+actix-web-actors = "4"
+
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+anyhow = "1.0"
+base64 = "0.21"
+bytestring = "1.3"
+parking_lot = "0.12"
+clap = { version = "4.1", features = ["derive"] }
+
+log = "0.4"
+simplelog = "0.12"
+
+# dependencies required to manually create ADIProxyAnisetteProvider (used for identifier)
+rand = "0.8"
+hex = "0.4"
+sha2 = "0.10"
+uuid = { version = "1.3", features = ["v4", "fast-rng", "macro-diagnostics"] }
+
+[dev-dependencies]
+reqwest = "0.11"
+plist = "1.4"
+async-trait = "0.1"
+awc = "3"
+futures-util = { version = "0.3", features = [
+    "sink", # sink feature might not be required
+] }

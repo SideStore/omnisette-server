@@ -1,0 +1,54 @@
+name: Build omnisette-server
+
+on:
+  push:
+    tags:
+
+jobs:
+  build:
+    name: Build omnisette-server
+    concurrency:
+      group: ${{ github.ref }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+
+      - name: Install rust targets
+        run: rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu armv7-unknown-linux-gnueabihf
+
+      - name: Cache rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: |
+          cargo build --release --target x86_64-unknown-linux-gnu
+          cargo build --release --target aarch64-unknown-linux-gnu
+          cargo build --release --target armv7-unknown-linux-gnueabihf
+
+      - name: Rename binaries
+        run: |
+          cp target/x86_64-unknown-linux-gnu/release/omnisette-server target/omnisette-server-linux-x86_64
+          cp target/aarch64-unknown-linux-gnu/release/omnisette-server target/omnisette-server-linux-aarch64
+          cp target/armv7-unknown-linux-gnueabihf/release/omnisette-server target/omnisette-server-linux-armv7
+
+      - name: Upload to new release
+        uses: softprops/action-gh-release@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          name: ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          files: |
+            target/omnisette-server-linux-x86_64
+            target/omnisette-server-linux-aarch64
+            target/omnisette-server-linux-armv7
+          body: |
+            Commit: https://github.com/${{ github.repository }}/commit/${{ github.sha }}
