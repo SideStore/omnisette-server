@@ -130,7 +130,9 @@ impl ProviderInstance {
         // However, it's actually incorrect, and omnisette will normalize it to be X-Mme-Client-Info when using provider.get_authentication_headers().
         // To maintain backwards compatibility with V1 (and older versions of SideStore), we clone the header to ensure it is in both the correct and incorrect header key.
         // We don't need to do this for V3 (`/get_headers`, get_authentication_headers_unique) because versions of SideStore that support V3 will use the correct header.
-        if let Some(client_info) = headers.get("X-MMe-Client-Info") {
+        if let Some(client_info) = headers.get("X-Mme-Client-Info") {
+            headers.insert("X-MMe-Client-Info".to_string(), client_info.clone());
+        } else if let Some(client_info) = headers.get("X-MMe-Client-Info") {
             headers.insert("X-Mme-Client-Info".to_string(), client_info.clone());
         }
         Ok(headers)
