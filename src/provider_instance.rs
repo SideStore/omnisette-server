@@ -126,6 +126,7 @@ impl ProviderInstance {
         self.set_identifier(self.original_identifier, None)?;
         self.set_path(self.original_path.clone())?;
         let mut headers = self.provider.get_anisette_headers(false).await?;
+
         // Provision servers give X-MMe-Client-Info because AltServer gives X-MMe-Client-Info.
         // However, it's actually incorrect, and omnisette will normalize it to be X-Mme-Client-Info when using provider.get_authentication_headers().
         // To maintain backwards compatibility with V1 (and older versions of SideStore), we clone the header to ensure it is in both the correct and incorrect header key.
@@ -135,6 +136,17 @@ impl ProviderInstance {
         } else if let Some(client_info) = headers.get("X-MMe-Client-Info") {
             headers.insert("X-Mme-Client-Info".to_string(), client_info.clone());
         }
+
+        // omnisette doesn't provide X-Apple-I-Client-Time, X-Apple-I-TimeZone or X-Apple-Locale headers because the client should provide them
+        // for V1 requests, we need to manually add them
+        let time = chrono::Utc::now();
+        headers.insert(
+            "X-Apple-I-Client-Time".to_string(),
+            time.to_rfc3339_opts(chrono::SecondsFormat::Secs, true), // .format("%Y-%m-%dT%H:%M:%SZ"), // Manually format to ISO 8601 because DateTime's to_rfc3339_opts is too smart
+        );
+        headers.insert("X-Apple-I-TimeZone".to_string(), "UTC".to_string());
+        headers.insert("X-Apple-Locale".to_string(), "en_US".to_string());
+
         Ok(headers)
     }
 
