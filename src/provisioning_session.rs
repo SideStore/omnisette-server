@@ -6,7 +6,7 @@ use base64::engine::general_purpose::STANDARD as base64_engine;
 use base64::Engine;
 use bytestring::ByteString;
 use log::{debug, error, info};
-use omnisette::adi_proxy::IDENTIFIER_LENGTH;
+use omnisette::adi_proxy::{ADIProxy, IDENTIFIER_LENGTH};
 use serde::Deserialize;
 #[cfg(test)]
 use serde::Serialize;
@@ -145,8 +145,7 @@ impl ProvisioningSession {
         match serde_json::from_str::<StartProvisioningData>(text.to_string().as_str()) {
             Ok(d) => {
                 if d.spim.len() > PAYLOAD_LIMIT {
-                    let message =
-                        format!("spim is over the payload limit ({PAYLOAD_LIMIT} bytes)");
+                    let message = format!("spim is over the payload limit ({PAYLOAD_LIMIT} bytes)");
 
                     error!("{message}");
                     ctx.exit(ServerResult::StartProvisioningError { message }, None);
@@ -216,8 +215,7 @@ impl ProvisioningSession {
         match serde_json::from_str::<EndProvisioningData>(text.to_string().as_str()) {
             Ok(d) => {
                 if d.ptm.len() > PAYLOAD_LIMIT {
-                    let message =
-                        format!("ptm is over the payload limit ({PAYLOAD_LIMIT} bytes)");
+                    let message = format!("ptm is over the payload limit ({PAYLOAD_LIMIT} bytes)");
 
                     error!("{message}");
                     ctx.exit(ServerResult::EndProvisioningError { message }, None);
@@ -336,9 +334,22 @@ impl Actor for ProvisioningSession {
     }
 
     fn stopped(&mut self, _: &mut Self::Context) {
-        debug!("Cleaning up");
+        info!("Cleaning up");
         let (path, _) = get_path_and_uuid_for_identifier(self.identifier);
-        if std::fs::remove_dir_all(path).is_ok() {}
+        match std::fs::remove_dir_all(path.clone()) {
+            Ok(_) => info!("Removed {}", path.display()),
+            Err(e) => error!("Failed to remove {}: {e:?}", path.display()),
+        }
+        match self
+            .provider
+            .lock()
+            .adi_proxy()
+            .destroy_provisioning_session(self.session)
+        {
+            Ok(_) => info!("Destroyed provisioning session"),
+            Err(e) => error!("Failed to destory provisioning session: {e:?}"),
+        }
+        info!("Cleanup complete!");
     }
 }
 
