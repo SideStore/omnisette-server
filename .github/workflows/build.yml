@@ -50,4 +50,6 @@ jobs:
             target/omnisette-server-linux-x86_64
             target/omnisette-server-linux-aarch64
           body: |
-            Commit: https://github.com/${{ github.repository }}/commit/${{ github.sha }}
+            ## Changelog
+
+            - TODO
