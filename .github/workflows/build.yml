@@ -23,21 +23,21 @@ jobs:
       - name: Install rust targets
         run: rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
 
-      - name: Install cross compilation dependencies
-        run: sudo apt install gcc-aarch64-linux-gnu
+      - name: Install cross
+        run: cargo install cross
 
       - name: Cache rust
         uses: Swatinem/rust-cache@v2
 
       - name: Build for x86_64
-        run: cargo build --release --target x86_64-unknown-linux-gnu
+        run: cargo build --release
 
       - name: Build for aarch64
-        run: TARGET_CC=/usr/bin/aarch64-linux-gnu-gcc TARGET_AR=/usr/bin/aarch64-linux-gnu-gcc-ar cargo build --release --target aarch64-unknown-linux-gnu
+        run: cross build --release --target aarch64-unknown-linux-gnu
 
-      - name: Rename binaries
+      - name: Move and rename binaries
         run: |
-          cp target/x86_64-unknown-linux-gnu/release/omnisette-server target/omnisette-server-linux-x86_64
+          cp target/release/omnisette-server target/omnisette-server-linux-x86_64
           cp target/aarch64-unknown-linux-gnu/release/omnisette-server target/omnisette-server-linux-aarch64
 
       - name: Upload to new release
