@@ -23,7 +23,7 @@ jobs:
           profile: minimal
 
       - name: Install rust targets
-        run: rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu armv7-unknown-linux-gnueabihf
+        run: rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
 
       - name: Cache rust
         uses: Swatinem/rust-cache@v2
@@ -32,13 +32,11 @@ jobs:
         run: |
           cargo build --release --target x86_64-unknown-linux-gnu
           cargo build --release --target aarch64-unknown-linux-gnu
-          cargo build --release --target armv7-unknown-linux-gnueabihf
 
       - name: Rename binaries
         run: |
           cp target/x86_64-unknown-linux-gnu/release/omnisette-server target/omnisette-server-linux-x86_64
           cp target/aarch64-unknown-linux-gnu/release/omnisette-server target/omnisette-server-linux-aarch64
-          cp target/armv7-unknown-linux-gnueabihf/release/omnisette-server target/omnisette-server-linux-armv7
 
       - name: Upload to new release
         uses: softprops/action-gh-release@v1
@@ -49,6 +47,5 @@ jobs:
           files: |
             target/omnisette-server-linux-x86_64
             target/omnisette-server-linux-aarch64
-            target/omnisette-server-linux-armv7
           body: |
             Commit: https://github.com/${{ github.repository }}/commit/${{ github.sha }}
