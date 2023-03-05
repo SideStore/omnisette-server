@@ -25,13 +25,16 @@ jobs:
       - name: Install rust targets
         run: rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
 
+      - name: Install cross compilation dependencies
+        run: apt install gcc-aarch64-linux-gnu
+
       - name: Cache rust
         uses: Swatinem/rust-cache@v2
 
       - name: Build
         run: |
           cargo build --release --target x86_64-unknown-linux-gnu
-          cargo build --release --target aarch64-unknown-linux-gnu
+          TARGET_CC=/usr/bin/aarch64-linux-gnu-gcc TARGET_AR=/usr/bin/aarch64-linux-gnu-gcc-ar cargo build --release --target aarch64-unknown-linux-gnu
 
       - name: Rename binaries
         run: |
