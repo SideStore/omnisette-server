@@ -156,10 +156,14 @@ impl ProviderInstance {
         adi_pb: Vec<u8>,
     ) -> Result<HashMap<String, String>> {
         let folder = self.set_identifier_and_path(identifier)?;
+        if let Err(e) = std::fs::create_dir_all(folder.clone()) {
+            error!("Got error creating folder (creating {folder:?}): {e:?}");
+            // Don't report this to the user because it might not be a problem
+        }
         let path = folder.join("adi.pb");
         // use match instead of ? to ensure we don't show anything sensitive
         if let Err(e) = std::fs::write(path.clone(), adi_pb) {
-            error!("Got error writing adi.pb: {e:?}");
+            error!("Got error writing adi.pb (writing to {path:?}): {e:?}");
             return Err(anyhow!("Couldn't write adi.pb. We don't give you the exact error message to ensure nothing sensitive is shown, so please contact the server owner with the exact time this happened!"));
         }
         let headers = self.provider.get_anisette_headers(true).await?;
