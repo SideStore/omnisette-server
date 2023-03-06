@@ -6,7 +6,7 @@ use crate::result::ServerResult;
 
 use actix_web::error::InternalError;
 use actix_web::middleware::{DefaultHeaders, Logger};
-use actix_web::{get, web, App, Error, HttpRequest, HttpResponse, HttpServer, Responder};
+use actix_web::{get, post, web, App, Error, HttpRequest, HttpResponse, HttpServer, Responder};
 use actix_web_actors::ws;
 use base64::engine::general_purpose::STANDARD as base64_engine;
 use base64::Engine;
@@ -58,7 +58,7 @@ pub struct HeadersInput {
     adi_pb: String,
 }
 
-#[get("/get_headers")]
+#[post("/get_headers")]
 async fn get_headers(wrapped: WrappedProvider, input: web::Json<HeadersInput>) -> impl Responder {
     info!("Getting unique headers");
     let mut provider = wrapped.lock();
@@ -154,6 +154,7 @@ async fn main() -> std::io::Result<()> {
                         error!("Error when parsing JSON: {}", message);
                         InternalError::from_response(
                             err,
+                            // JSON through actix is only used in get_headers, we do it manually for provisioning_session
                             ServerResult::GetHeadersError {
                                 message: format!("Error when parsing input: {message}"),
                             }

@@ -251,7 +251,7 @@ async fn test() -> Result<()> {
     let adi_pb = data.get("adi_pb").unwrap().as_str().unwrap().to_string();
 
     let response = client
-        .get("http://0.0.0.0:8080/get_headers")
+        .post("http://0.0.0.0:8080/get_headers")
         .body(
             serde_json::to_string(&HeadersInput {
                 identifier: identifier_base64,
