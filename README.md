@@ -1,6 +1,10 @@
 # omnisette-server
 
-An HTTP server wrapper for [omnisette](https://github.com/SideStore/apple-private-apis). Supports both V1 (Provision) and V3 of anisette servers.
+__An HTTP server wrapper for [omnisette](https://github.com/SideStore/apple-private-apis).__
+
+Supports both V1 (Provision) and V3 of anisette servers.
+
+![Alt](https://repobeats.axiom.co/api/embed/f63664cd6a9a808ffcf3336001087d474ddb86f4.svg "Repobeats analytics image")
 
 ## Setup
 
