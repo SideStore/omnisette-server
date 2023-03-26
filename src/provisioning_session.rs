@@ -333,7 +333,17 @@ impl Actor for ProvisioningSession {
                 ServerResult::TryAgainSoon {
                     duration: TIMEOUT_DURATION,
                 },
-                None,
+                // swift implementation might not connect fast enough to receive the result
+                // so we will put it in the close reason
+                Some(CloseReason {
+                    code: ws::CloseCode::Other(3001),
+                    description: Some(
+                        serde_json::to_string(&ServerResult::TryAgainSoon {
+                            duration: TIMEOUT_DURATION,
+                        })
+                        .unwrap(),
+                    ),
+                }),
             );
             return;
         }
