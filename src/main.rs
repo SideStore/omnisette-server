@@ -225,6 +225,10 @@ async fn main() -> std::io::Result<()> {
             .wrap(
                 DefaultHeaders::new()
                     .add(("Server", "omnisette-server"))
+                    .add((
+                        "Implementation-Version",
+                        const_format::formatcp!("omnisette-server {}", env!("CARGO_PKG_VERSION")),
+                    ))
                     // Standard security headers
                     .add(("X-XSS-Protection", "0"))
                     .add(("X-Frame-Options", "DENY"))
