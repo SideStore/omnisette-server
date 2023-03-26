@@ -55,12 +55,12 @@ const CLIENT_INFO: &str = const_format::formatcp!(
     "{{\"client_info\":\"{CLIENT_INFO_HEADER}\",\"user_agent\":\"{AKD_USER_AGENT}\"}}"
 );
 
-#[get("/client_info")]
+#[get("/v3/client_info")]
 async fn client_info() -> impl Responder {
     CLIENT_INFO
 }
 
-#[get("/provisioning_session")]
+#[get("/v3/provisioning_session")]
 async fn provisioning_session_ws(
     req: HttpRequest,
     stream: web::Payload,
@@ -77,7 +77,7 @@ pub struct HeadersInput {
     adi_pb: String,
 }
 
-#[post("/get_headers")]
+#[post("/v3/get_headers")]
 #[allow(clippy::await_holding_lock)]
 async fn get_headers(wrapped: WrappedProvider, input: web::Json<HeadersInput>) -> impl Responder {
     info!("Getting unique headers");

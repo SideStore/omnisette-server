@@ -18,6 +18,7 @@ use crate::{
 };
 
 const TIMEOUT_CHECK_INTERVAL: Duration = Duration::from_millis(250);
+// TODO: allow changing the timeout with a command line argument
 const TIMEOUT_DURATION: u64 = 1250; // TODO: adjust to be as small as possible while still not closing on slower connections
 const TIMEOUT: Duration = Duration::from_millis(TIMEOUT_DURATION);
 
