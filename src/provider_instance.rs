@@ -170,6 +170,7 @@ impl ProviderInstance {
         let headers = self.provider.get_anisette_headers(true).await?;
         if let Err(e) = std::fs::remove_dir_all(&folder) {
             error!("Got error removing folder, server hoster might have to manually cleanup (removing {folder:?}): {e:?}");
+            // Don't report this to the user because it might not be a problem
         }
         let mut headers = self.provider.normalize_headers(headers);
 
