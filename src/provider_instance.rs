@@ -110,7 +110,7 @@ impl ProviderInstance {
 
         if std::fs::create_dir_all(&path).is_ok() {}
         self.adi_proxy()
-            .set_provisioning_path(&path.to_str().ok_or(anyhow::anyhow!("bad path"))?)?;
+            .set_provisioning_path(path.to_str().ok_or(anyhow::anyhow!("bad path"))?)?;
         self.current_path = path;
         debug!("successfully changed path");
 

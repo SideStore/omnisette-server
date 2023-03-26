@@ -30,6 +30,7 @@ pub const PAYLOAD_LIMIT: usize = 1536; // this should be more than enough for id
 mod tests;
 
 #[get("/")]
+#[allow(clippy::await_holding_lock)]
 async fn index(wrapped: WrappedProvider) -> impl Responder {
     let mut provider = wrapped.lock();
 
@@ -77,6 +78,7 @@ pub struct HeadersInput {
 }
 
 #[post("/get_headers")]
+#[allow(clippy::await_holding_lock)]
 async fn get_headers(wrapped: WrappedProvider, input: web::Json<HeadersInput>) -> impl Responder {
     info!("Getting unique headers");
     let mut provider = wrapped.lock();
