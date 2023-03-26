@@ -313,11 +313,12 @@ dependencies = [
 [[package]]
 name = "android-loader"
 version = "0.2.0"
-source = "git+https://github.com/Dadoum/android-loader#136a01dd769e26c54cd853eb33f1ae72d2407283"
+source = "git+https://github.com/Dadoum/android-loader#6c495d254323d739bacb408dddf0a70fdeb24daa"
 dependencies = [
  "anyhow",
  "lazy_static",
  "libc",
+ "log",
  "memmap2",
  "rand",
  "region",
@@ -1973,7 +1974,7 @@ dependencies = [
 [[package]]
 name = "sysv64"
 version = "0.1.0"
-source = "git+https://github.com/Dadoum/android-loader#136a01dd769e26c54cd853eb33f1ae72d2407283"
+source = "git+https://github.com/Dadoum/android-loader#6c495d254323d739bacb408dddf0a70fdeb24daa"
 
 [[package]]
 name = "tempfile"
