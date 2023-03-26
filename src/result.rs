@@ -17,9 +17,11 @@ pub enum ServerResult {
     CurrentlyEndingProvisioning,
     ProvisioningSuccess { adi_pb: String },
 
-    TextOnlyOrWebsocketError, // this will be thrown if there's an error, or if a msg isn't Text
+    TextOnly,
+    WebsocketError { message: String },
     ClosingPerRequest,
     Timeout,
+    TryAgainSoon { duration: u64 },
     InvalidIdentifier { message: String },
     StartProvisioningError { message: String },
     EndProvisioningError { message: String },

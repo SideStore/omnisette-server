@@ -1,4 +1,5 @@
 use std::net::IpAddr;
+use std::path::PathBuf;
 
 use crate::provider_instance::{ProviderInstance, WrappedProvider};
 use crate::provisioning_session::ProvisioningSession;
@@ -12,10 +13,10 @@ use base64::engine::general_purpose::STANDARD as base64_engine;
 use base64::Engine;
 use clap::Parser;
 use log::{error, info, LevelFilter};
-use omnisette::adi_proxy::{Identifier, IDENTIFIER_LENGTH};
+use omnisette::adi_proxy::{Identifier, AKD_USER_AGENT, CLIENT_INFO_HEADER, IDENTIFIER_LENGTH};
+use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use parking_lot::Mutex;
 use serde::Deserialize;
-#[cfg(test)]
 use serde::Serialize;
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 
@@ -39,6 +40,23 @@ async fn index(wrapped: WrappedProvider) -> impl Responder {
             format!("Error: {e:?}")
         }
     }
+}
+
+#[derive(Serialize)]
+struct ClientInfo {
+    client_info: String,
+    user_agent: String,
+}
+
+// client info is such a simple response that it's faster just to format at const time instead of using serde_json
+// TODO: allow changing the header and user agent with a command line argument
+const CLIENT_INFO: &str = const_format::formatcp!(
+    "{{\"client_info\":\"{CLIENT_INFO_HEADER}\",\"user_agent\":\"{AKD_USER_AGENT}\"}}"
+);
+
+#[get("/client_info")]
+async fn client_info() -> impl Responder {
+    CLIENT_INFO
 }
 
 #[get("/provisioning_session")]
@@ -112,10 +130,51 @@ async fn get_headers(wrapped: WrappedProvider, input: web::Json<HeadersInput>) -
 struct CliArgs {
     #[arg(short, long, default_value_t = LevelFilter::Debug, help = "Available options in order of verbosity: Off, Error, Warn, Info, Debug, Trace")]
     log_level: LevelFilter,
-    #[arg(short, long, default_value_t = String::from("0.0.0.0"))]
+    #[arg(long, default_value_t = String::from("0.0.0.0"), help = "IP to bind the HTTP server to.")]
     ip: String,
-    #[arg(short, long, default_value_t = 8080)]
-    port: u16,
+    #[arg(
+        long,
+        default_value_t = 80,
+        value_name = "PORT",
+        help = "Port to bind the HTTP server to."
+    )]
+    http_port: u16,
+    #[arg(
+        long,
+        default_value_t = 443,
+        value_name = "PORT",
+        help = "Port to bind the HTTPS server to."
+    )]
+    https_port: u16,
+    #[arg(
+        short,
+        long,
+        value_name = "NUM",
+        help = "Number of workers (threads) to start. Defaults to the number of physical CPU cores."
+    )]
+    workers: Option<usize>,
+    #[arg(
+        long,
+        value_name = "FILE",
+        help = "Path to the private key if you want to serve over HTTPS. The first key will be used, and it must be PKCS8 encoded. Currently only `.pem` is supported.",
+        requires = "cert_chain"
+    )]
+    private_key: Option<PathBuf>,
+    #[arg(
+        long,
+        value_name = "FILE",
+        help = "Path to the certificate chain if you want to serve over HTTPS. Currently only `.pem` is supported.",
+        requires = "private_key"
+    )]
+    cert_chain: Option<PathBuf>,
+    #[arg(
+        long,
+        default_value_t = false,
+        help = "If specified, omnisette-server will not bind to the HTTP port, only the HTTPS port.",
+        requires = "private_key",
+        requires = "cert_chain"
+    )]
+    skip_http_bind: bool,
 }
 
 #[actix_web::main]
@@ -131,6 +190,7 @@ async fn main() -> std::io::Result<()> {
         args.log_level,
         ConfigBuilder::new()
             .set_target_level(LevelFilter::Error)
+            .set_thread_level(LevelFilter::Error)
             .add_filter_allow_str("omnisette")
             .add_filter_allow_str("android_loader")
             .add_filter_allow_str("actix_web")
@@ -140,9 +200,7 @@ async fn main() -> std::io::Result<()> {
     )
     .unwrap();
 
-    info!("Starting server");
-
-    HttpServer::new(|| {
+    let mut server = HttpServer::new(|| {
         App::new()
             // Create a provider for each thread
             .app_data(web::Data::new(Mutex::new(ProviderInstance::new())))
@@ -183,10 +241,40 @@ async fn main() -> std::io::Result<()> {
                     .add(("Cross-Origin-Resource-Policy", "same-site")),
             )
             .service(index)
+            .service(client_info)
             .service(provisioning_session_ws)
             .service(get_headers)
-    })
-    .bind((ip, args.port))?
-    .run()
-    .await
+    });
+
+    if let Some(num) = args.workers {
+        info!("Changing number of workers to {num}");
+        server = server.workers(num);
+    }
+
+    if let Some(private_key) = args.private_key {
+        let cert_chain = args.cert_chain.unwrap();
+
+        info!("Initializing HTTPS");
+
+        let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
+        builder
+            .set_private_key_file(private_key, SslFiletype::PEM)
+            .expect("bad private key");
+        builder
+            .set_certificate_chain_file(cert_chain)
+            .expect("bad certificate chain");
+
+        info!("Binding to https://{ip}:{}", args.https_port);
+        server = server.bind_openssl((ip, args.https_port), builder)?;
+    }
+
+    if args.skip_http_bind {
+        info!("Skipping HTTP bind")
+    } else {
+        info!("Binding to http://{ip}:{}", args.http_port);
+        server = server.bind((ip, args.http_port))?;
+    }
+
+    info!("Starting server");
+    server.run().await
 }

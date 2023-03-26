@@ -18,7 +18,8 @@ use crate::{
 };
 
 const TIMEOUT_CHECK_INTERVAL: Duration = Duration::from_millis(250);
-const TIMEOUT: Duration = Duration::from_millis(1250); // TODO: adjust to be as small as possible while still not closing on slower connections
+const TIMEOUT_DURATION: u64 = 1250; // TODO: adjust to be as small as possible while still not closing on slower connections
+const TIMEOUT: Duration = Duration::from_millis(TIMEOUT_DURATION);
 
 #[derive(Deserialize)]
 #[cfg_attr(test, derive(Serialize))]
@@ -47,13 +48,13 @@ impl ExitContext for ws::WebsocketContext<ProvisioningSession> {
     fn exit(&mut self, res: ServerResult, reason: Option<CloseReason>) {
         self.res(res);
         self.close(reason);
-        self.stop();
+        self.terminate();
     }
 }
 
 #[derive(Debug)]
 enum ProvisioningSessionState {
-    BlockingUntilProviderAvailable,
+    Wait,
     WaitingForIdentifier,
     WaitingForStartProvisioningData,
     CurrentlyStartingProvisioning,
@@ -74,7 +75,7 @@ impl ProvisioningSession {
         Self {
             last_action: Instant::now(),
             provider,
-            state: ProvisioningSessionState::BlockingUntilProviderAvailable,
+            state: ProvisioningSessionState::Wait,
             identifier: [0u8; IDENTIFIER_LENGTH],
             session: 0,
         }
@@ -83,14 +84,14 @@ impl ProvisioningSession {
     fn start_timeout_check(&self, ctx: &mut <Self as Actor>::Context) {
         ctx.run_interval(TIMEOUT_CHECK_INTERVAL, |act, ctx| {
             if Instant::now().duration_since(act.last_action) >= TIMEOUT {
-                info!("Disconnecting because of timeout");
+                error!("Disconnecting because of timeout");
                 ctx.exit(ServerResult::Timeout, None);
             }
         });
     }
 
     fn handle_identifier(&mut self, ctx: &mut <Self as Actor>::Context, text: ByteString) {
-        self.state = ProvisioningSessionState::BlockingUntilProviderAvailable; // ensure this method doesn't get called while it's executing
+        self.state = ProvisioningSessionState::Wait; // ensure this method doesn't get called while it's executing
         info!("Handling identifier");
         match serde_json::from_str::<Identifier>(text.to_string().as_str()) {
             Ok(d) => {
@@ -270,7 +271,7 @@ impl ProvisioningSession {
                     tk.as_slice(),
                 ) {
                     Ok(path) => {
-                        self.state = ProvisioningSessionState::BlockingUntilProviderAvailable;
+                        self.state = ProvisioningSessionState::Wait;
 
                         let adi_pb_path = path.join("adi.pb");
                         let adi_pb = match std::fs::read(adi_pb_path) {
@@ -289,6 +290,7 @@ impl ProvisioningSession {
                         };
                         if std::fs::remove_dir_all(path).is_ok() {}
                         info!("Exiting with success");
+                        self.session = 0; // don't destroy the session if it succeeded
                         ctx.exit(
                             ServerResult::ProvisioningSuccess {
                                 adi_pb: base64_engine.encode(adi_pb),
@@ -323,10 +325,19 @@ impl ProvisioningSession {
 impl Actor for ProvisioningSession {
     type Context = ws::WebsocketContext<Self>;
 
-    #[allow(unused_must_use)]
     fn started(&mut self, ctx: &mut Self::Context) {
-        ctx.res(ServerResult::Wait);
-        self.provider.lock(); // Ensure provider isn't being used by blocking current thread until we acquire the provider
+        let mut provider = self.provider.lock();
+        if provider.busy {
+            error!("Provider is busy");
+            ctx.exit(
+                ServerResult::TryAgainSoon {
+                    duration: TIMEOUT_DURATION,
+                },
+                None,
+            );
+            return;
+        }
+        provider.busy = true;
         self.state = ProvisioningSessionState::WaitingForIdentifier;
         self.start_timeout_check(ctx);
         info!("Telling client to give identifier");
@@ -336,19 +347,23 @@ impl Actor for ProvisioningSession {
     fn stopped(&mut self, _: &mut Self::Context) {
         info!("Cleaning up");
         let (path, _) = get_path_and_uuid_for_identifier(self.identifier);
-        match std::fs::remove_dir_all(path.clone()) {
+        match std::fs::remove_dir_all(&path) {
             Ok(_) => info!("Removed {}", path.display()),
             Err(e) => error!("Failed to remove {}: {e:?}", path.display()),
         }
-        match self
-            .provider
-            .lock()
-            .adi_proxy()
-            .destroy_provisioning_session(self.session)
-        {
-            Ok(_) => info!("Destroyed provisioning session"),
-            Err(e) => error!("Failed to destory provisioning session: {e:?}"),
+        let mut provider = self.provider.lock();
+        if self.session != 0 {
+            match provider
+                .adi_proxy()
+                .destroy_provisioning_session(self.session)
+            {
+                Ok(_) => info!("Destroyed provisioning session"),
+                Err(e) => error!("Failed to destory provisioning session: {e:?}"),
+            }
+        } else {
+            info!("Skipping destory provisioning session");
         }
+        provider.busy = false;
         info!("Cleanup complete!");
     }
 }
@@ -369,9 +384,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ProvisioningSessi
                 }
 
                 match self.state {
-                    ProvisioningSessionState::BlockingUntilProviderAvailable => {
-                        ctx.res(ServerResult::Wait)
-                    }
+                    ProvisioningSessionState::Wait => ctx.res(ServerResult::Wait),
 
                     ProvisioningSessionState::WaitingForIdentifier => {
                         self.handle_identifier(ctx, text)
@@ -400,9 +413,19 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ProvisioningSessi
                 ctx.exit(ServerResult::ClosingPerRequest, reason)
             }
 
-            _ => {
-                error!("The client tried to give us something other than text, or there was a Websocket error");
-                ctx.exit(ServerResult::TextOnlyOrWebsocketError, None)
+            Ok(_) => {
+                error!("The client tried to give us something other than text");
+                ctx.exit(ServerResult::TextOnly, None)
+            }
+
+            Err(e) => {
+                error!("There was a Websocket error: {e}");
+                ctx.exit(
+                    ServerResult::WebsocketError {
+                        message: format!("{e}"),
+                    },
+                    None,
+                )
             }
         }
     }

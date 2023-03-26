@@ -32,6 +32,7 @@ pub struct ProviderInstance {
     current_identifier: Identifier,
     original_path: PathBuf,
     current_path: PathBuf,
+    pub busy: bool,
 }
 
 impl ProviderInstance {
@@ -66,6 +67,7 @@ impl ProviderInstance {
             current_identifier: [0u8; IDENTIFIER_LENGTH],
             original_path: current_directory.clone(),
             current_path: current_directory,
+            busy: false,
         };
         instance.set_identifier(identifier, None).unwrap();
         info!("Initialization complete");
@@ -106,9 +108,9 @@ impl ProviderInstance {
             return Ok(());
         }
 
-        if std::fs::create_dir_all(path.clone()).is_ok() {}
+        if std::fs::create_dir_all(&path).is_ok() {}
         self.adi_proxy()
-            .set_provisioning_path(path.to_str().ok_or(anyhow::anyhow!("bad path"))?)?;
+            .set_provisioning_path(&path.to_str().ok_or(anyhow::anyhow!("bad path"))?)?;
         self.current_path = path;
         debug!("successfully changed path");
 
@@ -139,10 +141,9 @@ impl ProviderInstance {
 
         // omnisette doesn't provide X-Apple-I-Client-Time, X-Apple-I-TimeZone or X-Apple-Locale headers because the client should provide them
         // for V1 requests, we need to manually add them
-        let time = chrono::Utc::now();
         headers.insert(
             "X-Apple-I-Client-Time".to_string(),
-            time.to_rfc3339_opts(chrono::SecondsFormat::Secs, true), // .format("%Y-%m-%dT%H:%M:%SZ"), // Manually format to ISO 8601 because DateTime's to_rfc3339_opts is too smart
+            chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
         );
         headers.insert("X-Apple-I-TimeZone".to_string(), "UTC".to_string());
         headers.insert("X-Apple-Locale".to_string(), "en_US".to_string());
@@ -156,19 +157,26 @@ impl ProviderInstance {
         adi_pb: Vec<u8>,
     ) -> Result<HashMap<String, String>> {
         let folder = self.set_identifier_and_path(identifier)?;
-        if let Err(e) = std::fs::create_dir_all(folder.clone()) {
+        if let Err(e) = std::fs::create_dir_all(&folder) {
             error!("Got error creating folder (creating {folder:?}): {e:?}");
             // Don't report this to the user because it might not be a problem
         }
         let path = folder.join("adi.pb");
         // use match instead of ? to ensure we don't show anything sensitive
-        if let Err(e) = std::fs::write(path.clone(), adi_pb) {
+        if let Err(e) = std::fs::write(&path, adi_pb) {
             error!("Got error writing adi.pb (writing to {path:?}): {e:?}");
             return Err(anyhow!("Couldn't write adi.pb. We don't give you the exact error message to ensure nothing sensitive is shown, so please contact the server owner with the exact time this happened!"));
         }
         let headers = self.provider.get_anisette_headers(true).await?;
-        if std::fs::remove_dir_all(folder).is_ok() {}
-        Ok(self.provider.normalize_headers(headers))
+        if let Err(e) = std::fs::remove_dir_all(&folder) {
+            error!("Got error removing folder, server hoster might have to manually cleanup (removing {folder:?}): {e:?}");
+        }
+        let mut headers = self.provider.normalize_headers(headers);
+
+        headers.remove("X-Mme-Client-Info"); // SideStore will get this using /client_info endpoint
+        headers.remove("X-Apple-I-SRL-NO"); // SideStore will provide this
+
+        Ok(headers)
     }
 
     pub fn start_provisioning(
