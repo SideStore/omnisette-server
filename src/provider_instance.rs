@@ -178,7 +178,7 @@ impl ProviderInstance {
 
         // SideStore will provide these properties
         // Even if it gets a wrong device ID and MD LU for the identifier (which it shouldn't, I've tested it a lot and it always gave the same as Rust)
-        // we want to to use the same thing as what it used to send requests to apple servers
+        // we want it to use the same thing as what it used to send requests to apple servers
         headers.remove("X-Mme-Device-Id");
         headers.remove("X-Apple-I-MD-LU");
         headers.remove("X-Apple-I-SRL-NO");
