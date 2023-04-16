@@ -277,7 +277,7 @@ async fn main() -> std::io::Result<()> {
     }
 
     if let Some(private_key) = args.private_key {
-        let cert_chain = args.cert_chain.unwrap();
+        let cert_chain = args.cert_chain.unwrap(); // safe to unwrap since clap will ensure that if one argument is specified, the other is too
 
         info!("Initializing HTTPS");
 
