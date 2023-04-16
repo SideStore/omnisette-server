@@ -81,6 +81,7 @@ pub struct HeadersInput {
 }
 
 #[post("/v3/get_headers")]
+#[allow(clippy::await_holding_lock)]
 async fn get_headers(input: web::Json<HeadersInput>) -> impl Responder {
     info!("Getting unique headers");
     let input = input.into_inner();
@@ -188,6 +189,7 @@ struct CliArgs {
 }
 
 #[actix_web::main]
+#[allow(clippy::await_holding_lock)]
 async fn main() -> std::io::Result<()> {
     let args: CliArgs = CliArgs::parse();
 
