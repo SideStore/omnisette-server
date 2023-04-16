@@ -6,13 +6,13 @@ use base64::engine::general_purpose::STANDARD as base64_engine;
 use base64::Engine;
 use bytestring::ByteString;
 use log::{debug, error, info};
-use omnisette::adi_proxy::{ADIProxy, IDENTIFIER_LENGTH};
+use omnisette::adi_proxy::IDENTIFIER_LENGTH;
 use serde::Deserialize;
 #[cfg(test)]
 use serde::Serialize;
 
 use crate::{
-    provider_instance::{get_path_and_uuid_for_identifier, WrappedProvider},
+    provider_instance::ProviderInstance,
     result::{SendServerResult, ServerResult},
     PAYLOAD_LIMIT,
 };
@@ -65,19 +65,17 @@ enum ProvisioningSessionState {
 
 pub struct ProvisioningSession {
     last_action: Instant,
-    provider: WrappedProvider,
+    provider: Option<ProviderInstance>,
     state: ProvisioningSessionState,
-    identifier: omnisette::adi_proxy::Identifier,
     session: u32,
 }
 
 impl ProvisioningSession {
-    pub fn new(provider: WrappedProvider) -> Self {
+    pub fn new() -> Self {
         Self {
             last_action: Instant::now(),
-            provider,
+            provider: None,
             state: ProvisioningSessionState::Wait,
-            identifier: [0u8; IDENTIFIER_LENGTH],
             session: 0,
         }
     }
@@ -120,7 +118,23 @@ impl ProvisioningSession {
                     return;
                 }
 
-                self.identifier = identifier.as_slice().try_into().unwrap();
+                self.provider = match ProviderInstance::new(
+                    Some(identifier.as_slice().try_into().unwrap()),
+                    None,
+                ) {
+                    Ok(p) => Some(p),
+                    Err(e) => {
+                        error!("Got error creating ProviderInstance: {e:?}");
+                        ctx.exit(
+                            ServerResult::InvalidIdentifier {
+                                message: format!("Couldn't create ProviderInstance: {e:?}"),
+                            },
+                            None,
+                        );
+
+                        return;
+                    }
+                };
                 self.state = ProvisioningSessionState::WaitingForStartProvisioningData;
                 info!("Telling client to give start provisioning data");
                 ctx.res(ServerResult::GiveStartProvisioningData);
@@ -173,8 +187,9 @@ impl ProvisioningSession {
                 info!("Starting provisioning");
                 match self
                     .provider
-                    .lock()
-                    .start_provisioning(self.identifier, spim.as_slice())
+                    .as_mut()
+                    .unwrap() // should be safe to unwrap since it must be Some for this function to ever be called
+                    .start_provisioning(spim.as_slice())
                 {
                     Ok(r) => {
                         self.session = r.session;
@@ -265,31 +280,13 @@ impl ProvisioningSession {
                 };
 
                 info!("Ending provisioning");
-                match self.provider.lock().end_provisioning(
-                    self.identifier,
-                    self.session,
-                    ptm.as_slice(),
-                    tk.as_slice(),
-                ) {
-                    Ok(path) => {
-                        self.state = ProvisioningSessionState::Wait;
-
-                        let adi_pb_path = path.join("adi.pb");
-                        let adi_pb = match std::fs::read(adi_pb_path) {
-                            Ok(d) => d,
-                            Err(e) => {
-                                error!("Got error reading adi.pb: {e:?}");
-                                ctx.exit(
-                                    ServerResult::EndProvisioningError {
-                                        message: "Couldn't read adi.pb. We don't give you the exact error message to ensure nothing sensitive is shown, so please contact the server owner with the exact time this happened!".to_string(),
-                                    },
-                                    None,
-                                );
-
-                                return;
-                            }
-                        };
-                        if std::fs::remove_dir_all(path).is_ok() {}
+                match self
+                    .provider
+                    .as_mut()
+                    .unwrap() // should be safe to unwrap since it must be Some for this function to ever be called
+                    .end_provisioning(self.session, ptm.as_slice(), tk.as_slice())
+                {
+                    Ok(adi_pb) => {
                         info!("Exiting with success");
                         self.session = 0; // don't destroy the session if it succeeded
                         ctx.exit(
@@ -327,18 +324,6 @@ impl Actor for ProvisioningSession {
     type Context = ws::WebsocketContext<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
-        let mut provider = self.provider.lock();
-        if provider.busy {
-            error!("Provider is busy");
-            ctx.exit(
-                ServerResult::TryAgainSoon {
-                    duration: TIMEOUT_DURATION,
-                },
-                None,
-            );
-            return;
-        }
-        provider.busy = true;
         self.state = ProvisioningSessionState::WaitingForIdentifier;
         self.start_timeout_check(ctx);
         info!("Telling client to give identifier");
@@ -347,15 +332,12 @@ impl Actor for ProvisioningSession {
 
     fn stopped(&mut self, _: &mut Self::Context) {
         info!("Cleaning up");
-        let (path, _) = get_path_and_uuid_for_identifier(self.identifier);
-        match std::fs::remove_dir_all(&path) {
-            Ok(_) => info!("Removed {}", path.display()),
-            Err(e) => error!("Failed to remove {}: {e:?}", path.display()),
-        }
-        let mut provider = self.provider.lock();
-        if self.session != 0 {
-            match provider
-                .adi_proxy()
+        // yes, it would be better to use `let Some(provider) = self.provider` but if let chains currently aren't stable and nesting the if let in another if statement means duplicate code because of the skip log
+        if self.session != 0 && self.provider.is_some() {
+            match self
+                .provider
+                .as_mut()
+                .unwrap() // safe to unwrap since we check if it is Some
                 .destroy_provisioning_session(self.session)
             {
                 Ok(_) => info!("Destroyed provisioning session"),
@@ -364,7 +346,7 @@ impl Actor for ProvisioningSession {
         } else {
             info!("Skipping destory provisioning session");
         }
-        provider.busy = false;
+        self.provider = None;
         info!("Cleanup complete!");
     }
 }

@@ -1,7 +1,7 @@
 use std::net::IpAddr;
 use std::path::PathBuf;
 
-use crate::provider_instance::{ProviderInstance, WrappedProvider};
+use crate::provider_instance::ProviderInstance;
 use crate::provisioning_session::ProvisioningSession;
 use crate::result::ServerResult;
 
@@ -12,8 +12,9 @@ use actix_web_actors::ws;
 use base64::engine::general_purpose::STANDARD as base64_engine;
 use base64::Engine;
 use clap::Parser;
-use log::{error, info, LevelFilter};
+use log::{debug, error, info, LevelFilter};
 use omnisette::adi_proxy::{Identifier, AKD_USER_AGENT, CLIENT_INFO_HEADER, IDENTIFIER_LENGTH};
+use once_cell::sync::Lazy;
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use parking_lot::Mutex;
 use serde::Deserialize;
@@ -26,15 +27,18 @@ mod result;
 
 pub const PAYLOAD_LIMIT: usize = 1536; // this should be more than enough for identifier + adi.pb, both in base64 and wrapped in JSON
 
+static V1_PROVIDER: Mutex<Lazy<ProviderInstance>> =
+    Mutex::new(Lazy::new(|| ProviderInstance::new(None, None).unwrap()));
+
 #[cfg(test)]
 mod tests;
 
 #[get("/")]
 #[allow(clippy::await_holding_lock)]
-async fn index(wrapped: WrappedProvider) -> impl Responder {
-    let mut provider = wrapped.lock();
+async fn index() -> impl Responder {
+    let mut provider = V1_PROVIDER.lock();
 
-    match provider.get_authentication_headers().await {
+    match provider.get_authentication_headers_v1().await {
         Ok(d) => format!("{d:?}"),
         Err(e) => {
             error!("Couldn't get headers: {e:?}");
@@ -64,10 +68,9 @@ async fn client_info() -> impl Responder {
 async fn provisioning_session_ws(
     req: HttpRequest,
     stream: web::Payload,
-    wrapped: WrappedProvider,
 ) -> Result<HttpResponse, Error> {
     info!("Starting provisioning session");
-    ws::start(ProvisioningSession::new(wrapped), &req, stream)
+    ws::start(ProvisioningSession::new(), &req, stream)
 }
 
 #[derive(Deserialize)]
@@ -78,10 +81,8 @@ pub struct HeadersInput {
 }
 
 #[post("/v3/get_headers")]
-#[allow(clippy::await_holding_lock)]
-async fn get_headers(wrapped: WrappedProvider, input: web::Json<HeadersInput>) -> impl Responder {
+async fn get_headers(input: web::Json<HeadersInput>) -> impl Responder {
     info!("Getting unique headers");
-    let mut provider = wrapped.lock();
     let input = input.into_inner();
 
     let identifier = match base64_engine.decode(input.identifier) {
@@ -98,7 +99,7 @@ async fn get_headers(wrapped: WrappedProvider, input: web::Json<HeadersInput>) -
             message: format!("identifier must be {IDENTIFIER_LENGTH} bytes long"),
         };
     }
-    let identifier: Identifier = identifier.as_slice().try_into().unwrap();
+    let identifier: Identifier = identifier.as_slice().try_into().unwrap(); // this shouldn't fail since we just checked the length
 
     let adi_pb = match base64_engine.decode(input.adi_pb) {
         Ok(i) => i,
@@ -110,10 +111,17 @@ async fn get_headers(wrapped: WrappedProvider, input: web::Json<HeadersInput>) -
         }
     };
 
-    match provider
-        .get_authentication_headers_unique(identifier, adi_pb)
-        .await
-    {
+    let mut provider = match ProviderInstance::new(Some(identifier), Some(adi_pb)) {
+        Ok(i) => i,
+        Err(e) => {
+            error!("Got creating ProviderInstance: {e:?}");
+            return ServerResult::GetHeadersError {
+                message: format!("Couldn't create ProviderInstance: {e:?}"),
+            };
+        }
+    };
+
+    match provider.get_authentication_headers_v3().await {
         Ok(d) => {
             info!("Got unique headers");
             ServerResult::Headers(d)
@@ -172,7 +180,7 @@ struct CliArgs {
     #[arg(
         long,
         default_value_t = false,
-        help = "If specified, omnisette-server will not bind to the HTTP port, only the HTTPS port.",
+        help = const_format::formatcp!("If specified, {} will not bind to the HTTP port, only the HTTPS port.", env!("CARGO_PKG_NAME")),
         requires = "private_key",
         requires = "cert_chain"
     )]
@@ -202,10 +210,17 @@ async fn main() -> std::io::Result<()> {
     )
     .unwrap();
 
+    debug!(
+        "Initialized V1 provider and got headers: {:?}",
+        V1_PROVIDER
+            .lock()
+            .get_authentication_headers_v1()
+            .await
+            .unwrap()
+    );
+
     let mut server = HttpServer::new(|| {
         App::new()
-            // Create a provider for each thread
-            .app_data(web::Data::new(Mutex::new(ProviderInstance::new())))
             .app_data(
                 web::JsonConfig::default()
                     .limit(PAYLOAD_LIMIT)
@@ -226,10 +241,14 @@ async fn main() -> std::io::Result<()> {
             .wrap(Logger::default())
             .wrap(
                 DefaultHeaders::new()
-                    .add(("Server", "omnisette-server"))
+                    .add(("Server", env!("CARGO_PKG_NAME")))
                     .add((
                         "Implementation-Version",
-                        const_format::formatcp!("omnisette-server {}", env!("CARGO_PKG_VERSION")),
+                        const_format::formatcp!(
+                            "{} {}",
+                            env!("CARGO_PKG_NAME"),
+                            env!("CARGO_PKG_VERSION")
+                        ),
                     ))
                     // Standard security headers
                     .add(("X-XSS-Protection", "0"))
