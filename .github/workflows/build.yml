@@ -20,8 +20,8 @@ jobs:
           toolchain: stable
           profile: minimal
 
-      - name: Install rust targets
-        run: rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
+      - name: Install additional rust targets
+        run: rustup target add aarch64-unknown-linux-gnu
 
       - name: Cache rust
         uses: Swatinem/rust-cache@v2
