@@ -1,11 +1,13 @@
-FROM debian:stable-slim
+FROM rust:slim-buster
 
-RUN apt-get update && apt-get install -y curl unzip build-essential gdc dub && \
+RUN apt-get update && apt-get install --no-install-recommends -y curl perl make && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-COPY . /opt/omnisette-server/
-
 WORKDIR /opt/omnisette-server/
+
+COPY . .
+
+RUN  cargo build --release
 
 ENTRYPOINT [ "./docker-entrypoint.sh" ]
