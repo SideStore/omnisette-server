@@ -1,5 +1,5 @@
 #!/bin/bash
-# hi
+
 if [ -z "$(ls -A lib/ 2> /dev/null)" ]; then
   curl https://apps.mzstatic.com/content/android-apple-music-apk/applemusic.apk -O
   if [ "$(uname -m)" = 'aarch64' ]; then
@@ -14,4 +14,4 @@ if [ -z "$(ls -A lib/ 2> /dev/null)" ]; then
   rm applemusic.apk
 fi
 
-cargo run
+/opt/omnisette-server
