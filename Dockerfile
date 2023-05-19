@@ -8,6 +8,6 @@ WORKDIR /opt/omnisette-server/
 
 COPY . .
 
-RUN cargo build --release -Z sparse-registry
+RUN cargo build --release
 
 ENTRYPOINT [ "./docker-entrypoint.sh" ]
