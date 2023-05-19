@@ -8,6 +8,9 @@ on:
 #    tags:
 #    - '*'
 
+env:
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+
 jobs:
   docker:
     runs-on: ubuntu-latest
