@@ -15,7 +15,7 @@ ENV CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
 RUN cargo build --release
 
 
-#FROM alpine:3.18 AS runtime
+#FROM alpine:3.18 AS runtime # i couldn't use this image b/c of this error: bash: ./omnisette-server: cannot execute: required file not found
 FROM debian:stable-slim AS runtime
 
 #RUN apk add unzip curl
