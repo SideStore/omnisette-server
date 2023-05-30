@@ -2,8 +2,8 @@ name: Build and push docker image omnisette-server
 
 on:
   push:
-    tags:
-    - '*'
+#    tags:
+#    - '*'
 
 jobs:
   docker:
@@ -17,7 +17,7 @@ jobs:
         uses: docker/login-action@v2
         with:
           registry: ghcr.io
-          username: ${{ github.repository_owner }}
+          username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       # https://github.com/crazy-max/ghaction-docker-buildx/issues/172
       - name: Hack Docker FS to Build cryptography on armv6/armv7
