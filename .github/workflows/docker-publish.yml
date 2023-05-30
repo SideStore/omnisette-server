@@ -9,6 +9,9 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
+      - name: do smth
+        run: |
+          echo ${ GITHUB_REPOSITORY }
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v4
