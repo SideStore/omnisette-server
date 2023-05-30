@@ -34,10 +34,11 @@ jobs:
           sudo mount -t tmpfs -o size=9G tmpfs /var/lib/docker
           df -h
           sudo systemctl start docker
+          printenv
       - name: Build and push
         uses: docker/build-push-action@v3
         with:
           push: true
           tags: |
-            ghcr.io/SideStore/omnisette-server:latest
+            ghcr.io/macleykun/omnisette-server:latest
           platforms: linux/amd64,linux/arm/v7,linux/arm64/v8
