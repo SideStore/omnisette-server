@@ -2,8 +2,8 @@ name: Build and push docker image omnisette-server
 
 on:
   push:
-#    tags:
-#    - '*'
+    tags:
+    - '*'
 
 jobs:
   docker:
