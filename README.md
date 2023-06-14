@@ -43,12 +43,12 @@ rm applemusic.apk
 Run:
 
 ```bash
-docker run -p 6969:80 --volumes omnisette_data:/opt/omnisette-server/lib ghcr.io/sidestore/omnisette-server:latest
+docker run -d -p 6969:80 --volume omnisette_data:/opt/omnisette-server/lib ghcr.io/sidestore/omnisette-server:latest
 ```
 
 Or if you want to build it locally, clone the repository and then run:
 
 ```bash
 docker build . -t imagenameofyourchoosing
-docker run -p 6868:80 --entrypoint=/bin/bash -it imagenameofyourchoosing
+docker run -d -p 6969:80 --volume omnisette_data:/opt/omnisette-server/lib imagenameofyourchoosing
 ```
