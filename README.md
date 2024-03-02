@@ -52,3 +52,11 @@ Or if you want to build it locally, clone the repository and then run:
 docker build . -t imagenameofyourchoosing
 docker run -d --restart always --name omnisette -p 6969:80 --volume omnisette_data:/opt/omnisette-server/lib imagenameofyourchoosing
 ```
+
+## Ansible
+
+If you want to quickly setup omnisette with ansible, just use the setup-omnisette-ansible.yaml playbook.
+Setup your inventory and choose your desired host in the playbook. Tweak your parameters/ansible.cfg for the remote_user you use. Requires root.
+```bash
+ansible-playbook -i inventory setup-omnisette-ansible.yaml -k
+```
