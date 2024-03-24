@@ -4,9 +4,13 @@
   gather_facts: false
   become: True
   tasks:
-    - name: Setup podman
+    - name: Install podman and deps
       ansible.builtin.package:
-        name: podman
+        name:
+          - podman
+          - uidmap
+          - slirp4netns
+          - acl
         state: present
 
     - name: Setup rootless user
@@ -14,10 +18,10 @@
         name: rootless
       register: rootless_usr
 
-    - name: Make sure acl is installed for rootless
-      ansible.builtin.package:
-        name: acl
-        state: present
+    - name: Configure xdg_runtime
+      ansible.builtin.lineinfile:
+        line: "export XDG_RUNTIME_DIR=/run/user/{{rootless_usr.uid}}"
+        path: "/home/{{ rootless_usr.name }}/.bashrc"
 
     - name: enable linger
       ansible.builtin.command:
