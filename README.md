@@ -1,3 +1,6 @@
+> [!NOTE]
+> This project has been essentially replaced by Dadoum's anisette-v3-server. You can find it [here](https://github.com/dadoum/anisette-v3-server).
+
 # omnisette-server
 
 **An HTTP server wrapper for [omnisette](https://github.com/SideStore/apple-private-apis).**
